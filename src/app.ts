@@ -1,4 +1,6 @@
 import express from 'express';
+import apiRouter from './routes/index.js';
+import { appErrorHandler } from './common/errors/error-handler.js';
 
 export const app = express();
 
@@ -10,3 +12,5 @@ app.get('/health', (req, res) => {
 	});
 });
 
+app.use('/api/v1', apiRouter);
+app.use(appErrorHandler);
