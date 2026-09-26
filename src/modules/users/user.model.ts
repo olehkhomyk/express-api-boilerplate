@@ -1,4 +1,5 @@
 import { HydratedDocument, InferSchemaType, model, Schema } from 'mongoose';
+import { UserRole } from '../../common/auth/user-role.js';
 
 const userSchema = new Schema(
 	{
@@ -27,10 +28,10 @@ const userSchema = new Schema(
 			required: true,
 		},
 
-		role: {
-			type: String,
-			enum: ['USER', 'ADMIN'],
-			default: 'USER',
+		roles: {
+			type: [String],
+			enum: Object.values(UserRole),
+			default: [UserRole.USER],
 		},
 	},
 	{

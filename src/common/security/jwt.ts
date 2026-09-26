@@ -1,4 +1,5 @@
 import { jwtVerify, SignJWT } from 'jose';
+import { UserRole } from '../auth/user-role.js';
 
 const secret = new TextEncoder().encode(
 	process.env.JWT_ACCESS_SECRET,
@@ -8,14 +9,14 @@ const expiresIn = process.env.JWT_EXPIRES_IN || '15m';
 
 export type AccessTokenPayload = {
 	sub: string;
-	role: string;
+	roles: UserRole[];
 };
 
 export async function signAccessToken(
 	payload: AccessTokenPayload,
 ): Promise<string> {
 	return new SignJWT({
-		role: payload.role,
+		roles: [...payload.roles],
 	})
 		.setProtectedHeader({
 			alg: 'HS256',
@@ -33,12 +34,12 @@ export async function verifyAccessToken(
 		algorithms: ['HS256'],
 	});
 
-	if (!payload.sub || typeof payload.role !== 'string') {
+	if (!payload.sub || !Array.isArray(payload.roles)) {
 		throw new Error('Invalid access token payload');
 	}
 
 	return {
 		sub: payload.sub,
-		role: payload.role,
+		roles: payload.roles as UserRole[],
 	};
 }

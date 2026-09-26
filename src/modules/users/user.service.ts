@@ -40,6 +40,16 @@ export async function getById(id: string): Promise<UserDTO> {
 	return toUserDTO(user);
 }
 
+export async function getByEmail(email: string): Promise<UserDTO> {
+	const user = await UserModel.findOne({ email });
+
+	if (!user) {
+		throw new NotFoundError(`User with email ${email} not found`);
+	}
+
+	return toUserDTO(user);
+}
+
 export async function updateUser(id: string, data: UpdateUserBody): Promise<UserDTO> {
 	const foundUser = await UserModel.findById(id);
 
