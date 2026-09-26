@@ -4,6 +4,7 @@ import { toUserDTO, UserDTO } from './user.dto.js';
 import { NotFoundError } from '../../common/errors/not-found-error.js';
 import { ConflictError } from '../../common/errors/conflict-error.js';
 import { getLogger } from '../../common/logger/request-context.js';
+import { hashPassword } from '../../common/security/password.js';
 
 export async function createUser(data: CreateUserBody): Promise<UserDTO> {
 	const existingUser = await UserModel.findOne({ email: data.email });
@@ -15,9 +16,7 @@ export async function createUser(data: CreateUserBody): Promise<UserDTO> {
 	const { password, ...rest } = data;
 	const user = new UserModel(rest);
 
-	// TODO: Implement hasher for the password.
-	//  temporary solution.
-	// user.passwordHash = password;
+	user.passwordHash = await hashPassword(password);
 
 	const result = await user.save();
 	getLogger().info({ userId: result.id }, 'User created');
