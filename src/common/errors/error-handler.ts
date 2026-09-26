@@ -9,23 +9,25 @@ export const appErrorHandler: ErrorRequestHandler = (
 	res,
 	next,
 ) => {
+	res.err = err;
+
 	if (err instanceof AppError) {
 		res.status(err.status).json({
 			error: {
 				code: err.code,
 				message: err.message,
+				requestId: req.id,
 			},
 		});
 
 		return;
 	}
 
-	console.error(err);
-
 	res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
 		error: {
 			code: 'INTERNAL_SERVER_ERROR',
 			message: 'Internal server error',
+			requestId: req.id,
 		},
 	});
 };

@@ -1,16 +1,15 @@
 import express from 'express';
 import apiRouter from './routes/index.js';
 import { appErrorHandler } from './common/errors/error-handler.js';
+import { loggerMiddleware } from './common/logger/logger.js';
+import { requestContext } from './common/logger/request-context.js';
 
 export const app = express();
 
-app.use(express.json());
+app.use(loggerMiddleware);
+app.use(requestContext);
 
-app.get('/health', (req, res) => {
-	res.json({
-		status: 'ok',
-	});
-});
+app.use(express.json());
 
 app.use('/api/v1', apiRouter);
 app.use(appErrorHandler);

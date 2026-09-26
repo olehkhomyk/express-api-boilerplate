@@ -3,7 +3,7 @@ import { CreateUserBody, UpdateUserBody } from './user.validation.js';
 import { toUserDTO, UserDTO } from './user.dto.js';
 import { NotFoundError } from '../../common/errors/not-found-error.js';
 import { ConflictError } from '../../common/errors/conflict-error.js';
-import { UnexpectedError } from '../../common/errors/unexpected-error.js';
+import { getLogger } from '../../common/logger/request-context.js';
 
 export async function createUser(data: CreateUserBody): Promise<UserDTO> {
 	const existingUser = await UserModel.findOne({ email: data.email });
@@ -12,21 +12,17 @@ export async function createUser(data: CreateUserBody): Promise<UserDTO> {
 		throw new ConflictError('User with this email already exists');
 	}
 
-	try {
-		const { password, ...rest } = data;
-		const userRecord = new UserModel(rest);
+	const { password, ...rest } = data;
+	const user = new UserModel(rest);
 
-		// TODO: Implement hasher for the password.
-		//  temporary solution.
-		userRecord.passwordHash = password;
+	// TODO: Implement hasher for the password.
+	//  temporary solution.
+	// user.passwordHash = password;
 
-		await userRecord.save();
+	const result = await user.save();
+	getLogger().info({ userId: result.id }, 'User created');
 
-		return toUserDTO(userRecord);
-	} catch (e) {
-		// Todo: Make errors like tis to be logged in by logger as red error in console not throw to client.
-		throw new UnexpectedError(`${e}`);
-	}
+	return toUserDTO(result);
 }
 
 export async function getAllUsers(): Promise<UserDTO[]> {
@@ -53,9 +49,11 @@ export async function updateUser(id: string, data: UpdateUserBody): Promise<User
 	}
 
 	foundUser.set(data);
-	const userRecord = await foundUser.save();
+	const result = await foundUser.save();
 
-	return toUserDTO(userRecord);
+	getLogger().info({ userId: result.id }, 'User updated');
+
+	return toUserDTO(result);
 }
 
 export async function deleteById(id: string): Promise<void> {
@@ -64,4 +62,6 @@ export async function deleteById(id: string): Promise<void> {
 	if (!user) {
 		throw new NotFoundError(`User with id ${id} not found`);
 	}
+
+	getLogger().info({ userId: id }, 'User deleted');
 }
