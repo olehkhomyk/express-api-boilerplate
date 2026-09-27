@@ -4,7 +4,7 @@ import { UnauthorizedError } from '../errors/unauthorized-error.js';
 import { UserRole } from '../auth/user-role.js';
 import { ForbiddenError } from '../errors/forbidden-error.js';
 
-export function authorize(...allowedRoles: UserRole[]) {
+export function authorize(...allowedRoles: [UserRole, ...UserRole[]]) {
 	return (
 		req: Request,
 		res: Response,

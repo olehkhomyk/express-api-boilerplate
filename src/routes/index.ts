@@ -9,6 +9,5 @@ export const apiRouter = Router();
 
 apiRouter.use(AUTH_BASE_PATH, authRouter);
 apiRouter.use(USER_BASE_PATH, authenticate, userRouter);
-// apiRouter.use('/users', userRouter);
 
 export default apiRouter;

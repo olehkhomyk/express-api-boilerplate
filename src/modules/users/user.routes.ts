@@ -9,6 +9,8 @@ export const userRouter = Router();
 
 userRouter.get('/', userController.getUsers);
 
+userRouter.get('/me', authorize(UserRole.USER), userController.getMe);
+
 userRouter.get('/:id', validateReq(getUserByIdSchema), userController.getUserById);
 
 userRouter.post('/', authorize(UserRole.ADMIN), validateReq(createUserSchema), userController.createUser);

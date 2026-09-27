@@ -10,6 +10,7 @@ import {
 	UpdateUserBody,
 	UpdateUserParams,
 } from './user.validation.js';
+import { getCurrentUser } from '../../common/security/current-user.js';
 
 export async function createUser(
 	req: Request<EmptyObject, UserDTO, CreateUserBody>,
@@ -36,6 +37,16 @@ export async function getUserById(
 	const user: UserDTO = await userService.getById(req.params.id);
 
 	res.status(HttpStatus.OK).json(user);
+}
+
+export async function getMe(
+	req: Request<EmptyObject, UserDTO>,
+	res: Response<UserDTO>,
+): Promise<void> {
+	const sessionUser = getCurrentUser(req);
+	const user = await userService.getById(sessionUser.id);
+
+	res.status(HttpStatus.OK).send(user);
 }
 
 export async function updateUser(
