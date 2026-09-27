@@ -8,7 +8,7 @@ import { appErrorHandler } from './common/errors/utills/error-handler.js';
 import { loggerMiddleware } from './common/logger/logger.js';
 import { requestContext } from './common/logger/request-context.js';
 import { API_PREFIX } from './common/http/api-prefix.js';
-import { notFoundHandler } from './common/errors/not-found-hendler.js';
+import { notFoundHandler } from './common/errors/utills/not-found-hendler.js';
 import { env } from './config/env.js';
 
 export const app = express();
