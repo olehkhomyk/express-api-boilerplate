@@ -16,3 +16,13 @@ authRouter.post(
 	validateReq(registerSchema),
 	authController.register,
 );
+
+authRouter.post(
+	'/logout',
+	authController.logout,
+);
+
+authRouter.post(
+	'/refresh-token',
+	authController.refresh,
+);

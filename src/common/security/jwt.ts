@@ -5,7 +5,7 @@ const secret = new TextEncoder().encode(
 	process.env.JWT_ACCESS_SECRET,
 );
 
-const expiresIn = process.env.JWT_EXPIRES_IN || '15m';
+const expiresIn = process.env.JWT_ACCESS_EXPIRES_IN || '15m';
 
 export type AccessTokenPayload = {
 	sub: string;
@@ -18,9 +18,7 @@ export async function signAccessToken(
 	return new SignJWT({
 		roles: [...payload.roles],
 	})
-		.setProtectedHeader({
-			alg: 'HS256',
-		})
+		.setProtectedHeader({ alg: 'HS256' })
 		.setSubject(payload.sub)
 		.setIssuedAt()
 		.setExpirationTime(expiresIn)
