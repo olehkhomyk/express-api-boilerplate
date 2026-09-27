@@ -7,14 +7,16 @@ The goal is a fast start for any new backend: clone it, add a module, ship.
 
 ## Stack
 
-| Concern    | Tool                                    |
-|------------|-----------------------------------------|
-| Runtime    | Node.js 24 (ESM)                        |
-| HTTP       | Express 5 (native async error handling) |
-| Database   | MongoDB + Mongoose 9                    |
-| Validation | Zod 4                                   |
-| Logging    | Pino + pino-http (+ pino-pretty in dev) |
-| Language   | TypeScript (strict), `tsx` for dev      |
+| Concern    | Tool                                                  |
+|------------|-------------------------------------------------------|
+| Runtime    | Node.js 24 (ESM)                                      |
+| HTTP       | Express 5 (native async error handling)               |
+| Database   | MongoDB + Mongoose 9                                  |
+| Validation | Zod 4 (requests and env)                              |
+| Auth       | JWT access token (`jose`) + refresh token in a cookie |
+| Security   | `helmet`, `cors`, `connect-timeout`                   |
+| Logging    | Pino + pino-http (+ pino-pretty in dev)               |
+| Language   | TypeScript (strict), `tsx` for dev                    |
 
 ## Getting started
 
@@ -34,52 +36,92 @@ npm run dev                 # tsx watch, restarts on change
 > ⚠️ `npm start` runs the **compiled** code. After changing `src/`, run `npm run build` first, or you will be testing
 > stale code.
 
+> ⚠️ `tsx watch` does not restart on `.env` changes. Restart the dev server manually after editing `.env`.
+
 ### Environment variables
 
-| Variable    | Example                                                                  | Purpose                                 |
-|-------------|--------------------------------------------------------------------------|-----------------------------------------|
-| `PORT`      | `3000`                                                                   | HTTP port                               |
-| `NODE_ENV`  | `development` \| `production` \| `test`                                  | Runtime environment                     |
-| `LOG_LEVEL` | `trace` \| `debug` \| `info` \| `warn` \| `error` \| `fatal` \| `silent` | Log verbosity (**not** the environment) |
-| `MONGO_URI` | `mongodb://root:password@127.0.0.1:27017/node_api?authSource=admin`      | MongoDB connection string               |
+All variables are validated on startup in `src/config/env.ts`. With a missing or invalid value the app **refuses to
+start** and prints every problem at once. Nothing else in the code reads `process.env`; import `env` instead.
+
+| Variable                | Default       | Example / allowed values                                                 | Purpose                                             |
+|-------------------------|---------------|--------------------------------------------------------------------------|-----------------------------------------------------|
+| `NODE_ENV`              | `development` | `development` \| `production` \| `test`                                  | Runtime environment                                 |
+| `PORT`                  | `3000`        | `3000`                                                                   | HTTP port                                           |
+| `LOG_LEVEL`             | `info`        | `trace` \| `debug` \| `info` \| `warn` \| `error` \| `fatal` \| `silent` | Log verbosity (**not** the environment)             |
+| `MONGO_URI`             | —             | `mongodb://root:password@127.0.0.1:27017/node_api?authSource=admin`      | MongoDB connection string                           |
+| `JWT_ACCESS_SECRET`     | —             | 32+ random characters                                                    | Signs access tokens                                 |
+| `JWT_ACCESS_EXPIRES_IN` | `15m`         | `15m`, `1h`, `7d`                                                        | Access token lifetime                               |
+| `REQUEST_TIMEOUT_MS`    | `30000`       | `30000`                                                                  | Max time to respond; after it the client gets 503   |
+| `TRUST_PROXY`           | `0`           | `0`, `1`                                                                 | Number of proxies in front of the app (0 = none)    |
+| `CORS_ORIGINS`          | `*`           | `http://localhost:5173,https://app.site.com`                             | Browser origins allowed to call the API (`*` = any) |
+
+Generate a secret:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
 
 ## Project structure
 
 ```
 src/
-├── server.ts              # Entry point: load env → connect DB → listen
+├── server.ts              # Entry point: connect DB → listen
 ├── app.ts                 # Express app: middleware order + routers
 ├── config/
+│   ├── env.ts             # Validated env (single source of truth)
 │   └── database.ts        # Mongoose connection
 ├── routes/
 │   └── index.ts           # Mounts module routers under /api/v1
 ├── common/                # Reusable tools, not tied to any module
-│   ├── errors/            # AppError + subclasses, central error handler
-│   ├── http/              # HTTP status enum
+│   ├── auth/              # User roles
+│   ├── errors/            # AppError + subclasses, error normalizer, error / 404 handlers
+│   ├── http/              # HTTP status enum, API prefix
 │   ├── logger/            # Root logger, HTTP logger, request context
-│   ├── types/             # Shared utility types
+│   ├── security/          # JWT, password hashing, refresh tokens, authenticate / authorize
+│   ├── types/             # Shared utility types, Express augmentation (req.user)
 │   └── validation/        # Request validator middleware, shared Zod schemas
 └── modules/               # Business features, one folder per feature
-    └── users/
-        ├── user.routes.ts
-        ├── user.validation.ts
-        ├── user.controller.ts
-        ├── user.service.ts
-        ├── user.model.ts
-        └── user.dto.ts
+    ├── auth/              # register, login, refresh, logout, sessions
+    └── users/             # user CRUD
 ```
+
+### Where does a file go?
+
+Ask: **"What is this file about?"**
+
+| It is about…                                | Put it in           | Test                                         |
+|---------------------------------------------|---------------------|----------------------------------------------|
+| A specific business entity (users, orders…) | `modules/<name>/`   | Knows about a domain concept                 |
+| A generic tool                              | `common/`           | Could be copied to another project unchanged |
+| Wiring and starting *this* app              | `src/` root folders | `app.ts`, `server.ts`, `config/`, `routes/`  |
+
+Rules:
+
+- **Has an endpoint → module. A tool other modules use → `common`.**
+- `common` **never imports** from `modules`. Dependencies point one way: `modules → common`.
+- Modules may use each other one way only (`auth → users`, never back), and only through the other module's service
+  and DTOs, not its model.
+- Group by **topic**, not by file type. No generic `middleware/`, `utils/` or `constants/` dumping grounds; constants
+  live next to the code that uses them (`auth.constants.ts`).
+
+## Request lifecycle
 
 ```
 Request
+  → trust proxy          real client IP behind a proxy (TRUST_PROXY)
   → loggerMiddleware     assigns reqId (UUID), sets X-Request-Id header, logs one line on finish
   → requestContext       puts req.log into AsyncLocalStorage → getLogger() works anywhere
-  → express.json()
+  → timeout              503 if no response within REQUEST_TIMEOUT_MS
+  → helmet, cors         security headers, allowed browser origins
+  → cookieParser, express.json()
   → /api/v1 router
-      → validateReq(schema)   Zod: body / params / query → 400 on failure
-      → controller            HTTP in/out only
-      → service               business logic, throws AppError subclasses
-      → model                 Mongoose
-  → appErrorHandler      maps errors to JSON responses
+      → authenticate / authorize   JWT → req.user, role check
+      → validateReq(schema)        Zod: replaces body / params / query with parsed data → 400 on failure
+      → controller                 HTTP in/out only
+      → service                    business logic, throws AppError subclasses
+      → model                      Mongoose
+  → notFoundHandler      unknown route → 404
+  → appErrorHandler      normalizes any error into the API error format
 Response
 ```
 
@@ -87,41 +129,82 @@ Response
 
 | Layer          | Does                                                                  | Does not                                 |
 |----------------|-----------------------------------------------------------------------|------------------------------------------|
-| **routes**     | Maps URL + method → validator → controller                            | Contain logic                            |
+| **routes**     | Maps URL + method → auth → validator → controller                     | Contain logic                            |
 | **validation** | Zod schemas for `body`/`params`/`query`, exports inferred types       | Touch the database                       |
-| **controller** | Reads `req`, calls the service, sets status, sends DTO                | Business logic, logging, try/catch       |
+| **controller** | Reads `req`, calls the service, sets status and cookies, sends DTO    | Business logic, logging, try/catch       |
 | **service**    | Business rules, DB access, throws domain errors, logs business events | Know about `req`/`res`                   |
 | **model**      | Mongoose schema + inferred types                                      | Business logic                           |
 | **dto**        | Maps a DB document → public API shape (`toUserDTO`)                   | Leak internal fields (`passwordHash`, …) |
 
+## Validation
+
+`validateReq(schema)` parses `{ body, params, query }` and **replaces** them on `req` with the parsed result. Fields
+that are not in the schema are dropped, so a client cannot sneak in `roles` or `passwordHash` (mass assignment).
+Zod transforms (`.trim()`, `.toLowerCase()`, defaults) are applied too.
+
+Every route that reads `body`, `params` or `query` must have `validateReq`: the `Request<…>` generics in a controller
+are a promise to TypeScript, not a runtime check.
+
+## Authentication and authorization
+
+| Token   | Format        | Lifetime | Stored                                           | Sent                          |
+|---------|---------------|----------|--------------------------------------------------|-------------------------------|
+| Access  | JWT (`HS256`) | 15m      | Client memory                                    | `Authorization: Bearer …`     |
+| Refresh | Random string | 30 days  | `httpOnly` cookie; SHA-256 hash in `AuthSession` | Automatically, `/auth/*` only |
+
+- **Rotation**: every refresh deletes the old session (`findOneAndDelete`, atomic) and issues a new pair, so a refresh
+  token works exactly once.
+- **Cleanup**: a TTL index on `AuthSession.expiresAt` makes MongoDB delete expired sessions by itself.
+- The access token carries `sub` and `roles`. On refresh, roles are re-read from the DB, so role changes apply at the
+  next refresh.
+- `authenticate` verifies the JWT and sets `req.user`; `authorize(UserRole.ADMIN)` checks roles.
+- Profile schemas never contain `roles`. Role management, when added, gets its **own admin-only endpoint** with its
+  own schema (e.g. `PUT /users/:id/roles`).
+
 ## Error handling
 
 - Services **throw**; they do not return error objects and do not send responses.
-- Expected errors extend `AppError` (`status`, `code`, `message`), e.g. `NotFoundError`, `ConflictError`.
-- Anything that is **not** an `AppError` is treated as unexpected → `500` with a generic message.
+- Expected errors extend `AppError` (`status`, `code`, `message`, optional `details` / `cause`), e.g. `NotFoundError`,
+  `ConflictError`, `ValidationError`. `HttpError` is the generic class for infrastructure cases only.
 - Express 5 forwards rejected promises to the error handler automatically, so **no try/catch just to rethrow**.
   Use try/catch only when you *do* something: translate a known error, retry, fall back, or clean up.
 
-Error response shape:
+`normalizeError` translates known third-party errors, so every error leaves the API in the same format:
+
+| Source                          | Response                           |
+|---------------------------------|------------------------------------|
+| `AppError`                      | its own status and code            |
+| `ZodError`                      | 400 `VALIDATION_ERROR` + `details` |
+| Mongo duplicate key (`E11000`)  | 409 `CONFLICT` + field names       |
+| Mongoose `ValidationError`      | 400 `VALIDATION_ERROR` + `details` |
+| Mongoose `CastError`            | 400 `VALIDATION_ERROR`             |
+| Malformed JSON / body too large | 400 `INVALID_JSON` / 413           |
+| Request timeout                 | 503 `REQUEST_TIMEOUT`              |
+| Anything else                   | 500 `INTERNAL_SERVER_ERROR`        |
 
 ```json
 {
   "error": {
-    "code": "CONFLICT",
-    "message": "User with this email already exists",
-    "requestId": "0dab4c34-4e81-4763-9da4-432431c0e0e9"
+    "code": "VALIDATION_ERROR",
+    "message": "Validation failed",
+    "requestId": "0dab4c34-4e81-4763-9da4-432431c0e0e9",
+    "details": [{ "field": "body.email", "message": "Invalid email address" }]
   }
 }
 ```
 
-The `requestId` matches the `X-Request-Id` header and the `reqId` field in the logs, so one ID from a user's bug report
-finds every log line of that request.
+- `details` is **public**: put only client-safe data there (fields, limits). Internal info goes to `cause`, which is
+  logged but never sent.
+- The `requestId` matches the `X-Request-Id` header and the `reqId` field in the logs, so one ID from a user's bug
+  report finds every log line of that request.
+- Clients should rely on `code`, not on `message`.
 
 ## Logging
 
 - **Prod**: JSON lines to stdout, meant for a log collector (Loki, Datadog, ELK). The app never writes log files.
 - **Dev**: pretty, colored, single-line output via `pino-pretty`.
 - Every request produces **one access line**: `POST /api/v1/users 201 11ms`.
+- Stack traces are logged for 5xx only; 4xx get the access line without a stack.
 - Every log line inside a request carries the same `reqId`, via `AsyncLocalStorage` (see
   `common/logger/request-context.ts`).
 
@@ -149,46 +232,76 @@ dev details.
 - **ESM** with explicit `.js` extensions in relative imports (required by `NodeNext`).
 - **Tabs**, single quotes, semicolons, trailing commas.
 - File names: `<module>.<layer>.ts` inside modules (`user.service.ts`), kebab-case elsewhere (`error-handler.ts`).
+- URL paths in kebab-case (`/auth/refresh-token`); JSON fields and query params in camelCase.
 - **Named exports**; services are imported as a namespace: `import * as userService from './user.service.js'`.
-- `import type` for type-only imports.
+- `import type` for type-only imports; `type` over `interface`; `as const` objects over TS `enum`.
 - Types come from their source of truth instead of being hand-written:
     - request types: `z.infer<typeof schema>` in `*.validation.ts`
     - document types: `InferSchemaType` in `*.model.ts`
 - Explicit return types on exported functions (`Promise<UserDTO>`).
 - Use the `HttpStatus` enum instead of numeric status codes.
+- `find*` returns `null` when nothing is found; `get*` throws `NotFoundError`.
 
 ## Adding a new module
 
-1. Create `src/modules/<name>/` with `routes`, `validation`, `controller`, `service`, `model`, `dto`.
-2. Define Zod schemas and export the inferred types.
+1. Create `src/modules/<name>/` with `routes`, `validation`, `controller`, `service`, `model`, `dto`
+   (+ `constants` if needed).
+2. Define Zod schemas and export the inferred types; add `validateReq` to every route that reads input.
 3. Map documents to DTOs; never return raw Mongoose documents.
 4. Throw `AppError` subclasses from the service; add a new subclass in `common/errors/` if needed.
-5. Mount the router in `src/routes/index.ts`.
+5. Mount the router in `src/routes/index.ts`, with `authenticate` if the module is private.
 
 ## API
 
 Base URL: `/api/v1`
 
-| Method   | Path         | Description      |
-|----------|--------------|------------------|
-| `GET`    | `/users`     | List users       |
-| `GET`    | `/users/:id` | Get a user by ID |
-| `POST`   | `/users`     | Create a user    |
-| `PUT`    | `/users/:id` | Update a user    |
-| `DELETE` | `/users/:id` | Delete a user    |
+| Method   | Path                  | Access         | Description                                                                        |
+|----------|-----------------------|----------------|------------------------------------------------------------------------------------|
+| `POST`   | `/auth/register`      | public         | Create an account → `{ user, accessToken, accessTokenExpiresIn }` + refresh cookie |
+| `POST`   | `/auth/login`         | public         | Log in → `{ user, accessToken, accessTokenExpiresIn }` + refresh cookie            |
+| `POST`   | `/auth/refresh-token` | refresh cookie | New token pair → `{ accessToken, accessTokenExpiresIn }` + new cookie              |
+| `POST`   | `/auth/logout`        | refresh cookie | Delete the session and clear the cookie                                            |
+| `GET`    | `/users`              | authenticated  | List users                                                                         |
+| `GET`    | `/users/:id`          | authenticated  | Get a user by ID                                                                   |
+| `POST`   | `/users`              | admin          | Create a user                                                                      |
+| `PUT`    | `/users/:id`          | admin          | Update a user                                                                      |
+| `DELETE` | `/users/:id`          | admin          | Delete a user                                                                      |
+
+`accessTokenExpiresIn` is in seconds (like OAuth `expires_in`).
 
 ## Roadmap
 
-- [ ] Validate env on startup with Zod (`config/env.ts`) instead of reading `process.env` directly
-- [ ] Add `.env.example`
-- [ ] Enable `pino-pretty` only when `NODE_ENV=development`
-- [ ] Set `res.err` only for unexpected errors (no stack traces for 4xx)
+Security and bugs:
+
+- [ ] Rate limit on `/auth/*` (brute force; each scrypt hash takes 128 MB of memory)
+- [ ] `GET /users` and `GET /users/:id` expose every user's email to any logged-in user: admin-only or a public DTO
+- [ ] Handle `listen` errors in `server.ts` (on a busy port the process currently hangs silently)
+- [ ] Constant-time login: run `verifyPassword` against a dummy hash when the user doesn't exist (email enumeration)
+- [ ] `updateUserSchema.email` should be `z.email()`
+- [ ] `validateReq`: `defineProperty` with `configurable: true, writable: true` (a second validator would throw)
+
+Consistency:
+
+- [ ] Status codes: `201` for `POST /users`, `204` for `DELETE /users/:id` and `logout`
+- [ ] `auth` should go through `userService` instead of `UserModel`; `register` duplicates `createUser`
+- [ ] Remove unused `getByEmail` and the leftover `@types/pino`, `@types/pino-http`
+- [ ] Naming: `errors/utills/` → `errors/`, `not-found-hendler` → `not-found-handler`, `common/auth/` →
+  `common/security/`,
+  `auth.router.ts` → `auth.routes.ts`, `name` in `package.json`
+
+Before the first deploy:
+
+- [ ] Graceful shutdown (SIGTERM → close server and DB), `/health` and `/ready`
 - [ ] Replace `console.log` in `server.ts` / `database.ts` with the logger
-- [ ] Password hashing
-- [ ] Map Mongo duplicate key (`E11000`) → 409 and Mongoose `ValidationError` → 400 in the error handler
-- [ ] `201 Created` for POST, `204 No Content` for DELETE
-- [ ] 404 handler for unknown routes
-- [ ] Graceful shutdown (SIGTERM → close server and DB)
-- [ ] Remove unused `@types/pino` and `@types/pino-http` (both packages ship their own types)
-- [ ] ESLint + Prettier, tests, CI
-- [ ] Pin Node version (`engines`, `.nvmrc`)
+- [ ] Restrict `CORS_ORIGINS` (currently `*`)
+
+Before reusing the template in a new project:
+
+- [ ] Tests (Vitest + supertest), ESLint + Prettier, CI
+- [ ] `.env.example`, pin Node version (`engines`, `.nvmrc`)
+
+Later, when needed:
+
+- [ ] Pagination for list endpoints
+- [ ] Refresh token reuse detection (revoke all sessions of a user)
+- [ ] `userId` in the log context after `authenticate`

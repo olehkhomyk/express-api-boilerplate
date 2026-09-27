@@ -41,6 +41,7 @@ export async function logout(
 	}
 
 	await authService.logout(token);
+	res.clearCookie(REFRESH_COOKIE_NAME, refreshCookieOptions);
 	res.status(HttpStatus.OK).end();
 }
 
@@ -52,6 +53,7 @@ export async function refresh(
 	if (!token) {
 		throw new UnauthorizedError('Refresh token missing');
 	}
+
 
 	const { refreshToken, ...authData } = await authService.refresh(token);
 	res.cookie(REFRESH_COOKIE_NAME, refreshToken, refreshCookieOptions);

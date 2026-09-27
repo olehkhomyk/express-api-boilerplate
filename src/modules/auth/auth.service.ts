@@ -70,7 +70,12 @@ export async function refresh(refreshToken: string): Promise<AuthDTO & RefreshTo
 		throw new UnauthorizedError('Invalid refresh token');
 	}
 
-	const userDTO = await userService.getById(session.userId.toString());
+	const userDTO = await userService.findById(session.userId.toString());
+
+	if (!userDTO) {
+		throw new UnauthorizedError('Invalid refresh token');
+	}
+
 	const tokens = await issueTokens(userDTO);
 
 	return { ...tokens };
@@ -82,20 +87,20 @@ export async function logout(refreshToken: string): Promise<void> {
 }
 
 async function issueTokens(user: UserDTO): Promise<AuthDTO & RefreshTokenDTO> {
-	const accessToken = await signAccessToken({
+	const { token: accessToken, expiresIn: accessTokenExpiresIn } = await signAccessToken({
 		sub: user.id,
 		roles: user.roles,
 	});
 
-	const expiresAt = new Date(Date.now() + REFRESH_TTL_MS);
+	const sessionExpiresAt = new Date(Date.now() + REFRESH_TTL_MS);
 
 	const refreshToken = generateRefreshToken();
 	await AuthSessionModel.create({
 		userId: user.id,
 		tokenHash: hashRefreshToken(refreshToken),
-		expiresAt,
+		expiresAt: sessionExpiresAt,
 	});
 
-	return { accessToken, accessTokenExpiresIn: expiresAt, refreshToken };
+	return { accessToken, accessTokenExpiresIn, refreshToken };
 }
 

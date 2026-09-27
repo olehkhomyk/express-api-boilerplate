@@ -8,9 +8,12 @@ export const HttpStatus = {
 	FORBIDDEN: 403,
 	NOT_FOUND: 404,
 	CONFLICT: 409,
+	PAYLOAD_TOO_LARGE: 413,
+	UNSUPPORTED_MEDIA_TYPE: 415,
 	UNPROCESSABLE_ENTITY: 422,
 
 	INTERNAL_SERVER_ERROR: 500,
+	SERVICE_UNAVAILABLE: 503,
 } as const;
 
 export type HttpStatus = typeof HttpStatus[keyof typeof HttpStatus];

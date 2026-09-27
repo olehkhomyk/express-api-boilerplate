@@ -30,14 +30,22 @@ export async function getAllUsers(): Promise<UserDTO[]> {
 	return users.map(toUserDTO);
 }
 
-export async function getById(id: string): Promise<UserDTO> {
+// Convention: find* returns null when nothing is found, get* throws NotFoundError.
+
+export async function findById(id: string): Promise<UserDTO | null> {
 	const user = await UserModel.findById(id);
+
+	return user ? toUserDTO(user) : null;
+}
+
+export async function getById(id: string): Promise<UserDTO> {
+	const user = await findById(id);
 
 	if (!user) {
 		throw new NotFoundError(`User with id ${id} not found`);
 	}
 
-	return toUserDTO(user);
+	return user;
 }
 
 export async function getByEmail(email: string): Promise<UserDTO> {

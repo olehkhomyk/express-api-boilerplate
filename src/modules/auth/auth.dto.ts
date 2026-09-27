@@ -2,7 +2,7 @@ import { UserDTO } from '../users/user.dto.js';
 
 export type AuthDTO = {
 	accessToken: string;
-	accessTokenExpiresIn: Date;
+	accessTokenExpiresIn: number;
 };
 
 export type RefreshTokenDTO = {
