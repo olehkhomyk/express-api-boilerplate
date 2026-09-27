@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { ZodType } from 'zod';
+import { ValidationError } from '../errors/validation-error.js';
 
 export function validateReq(schema: ZodType) {
 	return (req: Request, res: Response, next: NextFunction) => {
@@ -10,16 +11,20 @@ export function validateReq(schema: ZodType) {
 		});
 
 		if (!result.success) {
-			return res.status(400).json({
-				error: {
-					code: 'VALIDATION_ERROR',
-					message: 'Validation failed',
-					details: result.error.issues.map(issue => ({
-						field: issue.path.join('.'),
-						message: issue.message,
-					})),
-				},
-			});
+			throw ValidationError.fromZod(result.error);
+		}
+
+		const { body, params, query } = result.data as { body?: unknown; params?: unknown; query?: unknown };
+
+		if (body) {
+			req.body = body;
+		}
+		if (params) {
+			req.params = params as Request['params'];
+		}
+		if (query) {
+			// As in Express 5 query is readonly getter, need to redefine it this way.
+			Object.defineProperty(req, 'query', { value: query });
 		}
 
 		next();

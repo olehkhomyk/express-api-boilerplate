@@ -17,6 +17,9 @@ const N = 2 ** 17;
 const r = 8;
 const p = 1;
 
+// TODO: Логін — DoS-вектор. scrypt з N=2^17, r=8 бере 128 МБ на один хеш, а пул потоків має 4 потоки, тобто до 512 МБ
+//      на одночасні логіни. Rate limiting при цьому немає. Параметри відповідають OWASP, але без ліміту на /auth/*
+//      сервер легко «покласти».
 export async function hashPassword(password: string): Promise<string> {
 	const salt = randomBytes(16);
 

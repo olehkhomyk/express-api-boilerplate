@@ -1,21 +1,26 @@
-import { jwtVerify, SignJWT } from 'jose';
+import { decodeJwt, jwtVerify, SignJWT } from 'jose';
 import { UserRole } from '../auth/user-role.js';
+import { env } from '../../config/env.js';
 
-const secret = new TextEncoder().encode(
-	process.env.JWT_ACCESS_SECRET,
-);
+const secret = new TextEncoder().encode(env.JWT_ACCESS_SECRET);
 
-const expiresIn = process.env.JWT_ACCESS_EXPIRES_IN || '15m';
+const expiresIn = env.JWT_ACCESS_EXPIRES_IN;
 
 export type AccessTokenPayload = {
 	sub: string;
 	roles: UserRole[];
 };
 
+export type SignedAccessToken = {
+	token: string;
+	/** Seconds until the token expires, taken from the token itself. */
+	expiresIn: number;
+};
+
 export async function signAccessToken(
 	payload: AccessTokenPayload,
-): Promise<string> {
-	return new SignJWT({
+): Promise<SignedAccessToken> {
+	const token = await new SignJWT({
 		roles: [...payload.roles],
 	})
 		.setProtectedHeader({ alg: 'HS256' })
@@ -23,6 +28,10 @@ export async function signAccessToken(
 		.setIssuedAt()
 		.setExpirationTime(expiresIn)
 		.sign(secret);
+
+	const { iat, exp } = decodeJwt(token);
+
+	return { token, expiresIn: exp! - iat! };
 }
 
 export async function verifyAccessToken(
