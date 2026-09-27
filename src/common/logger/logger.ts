@@ -24,6 +24,8 @@ export const loggerMiddleware = pinoHttp({
 	quietReqLogger: true,
 	customSuccessMessage: (req, res, ms) =>
 		`${req.method} ${(req as Request).originalUrl} ${res.statusCode} ${ms}ms`,
+	customErrorMessage: (req, res, _err, ms?: number) =>
+		`${req.method} ${(req as Request).originalUrl} ${res.statusCode} ${ms}ms`,
 	customLogLevel: (req, res, err) =>
 		err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
 	serializers: {

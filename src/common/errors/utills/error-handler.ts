@@ -9,9 +9,24 @@ export const appErrorHandler: ErrorRequestHandler = (
 	res,
 	next,
 ) => {
+	if (res.headersSent) {
+		req.log.warn({ err }, 'Error after response was sent');
+
+		if (!res.writableEnded) {
+			res.destroy();
+		}
+
+		return;
+	}
+
 	const appError = normalizeError(err);
 
 	if (appError) {
+		// Server-side failures (5xx, e.g. timeout) go to the log with a stack trace; client errors (4xx) don't.
+		if (appError.status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+			res.err = err;
+		}
+
 		res.status(appError.status).json({
 			error: {
 				code: appError.code,

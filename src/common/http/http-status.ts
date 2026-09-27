@@ -13,6 +13,7 @@ export const HttpStatus = {
 	UNPROCESSABLE_ENTITY: 422,
 
 	INTERNAL_SERVER_ERROR: 500,
+	SERVICE_UNAVAILABLE: 503,
 } as const;
 
 export type HttpStatus = typeof HttpStatus[keyof typeof HttpStatus];

@@ -50,6 +50,17 @@ function isBodyParserError(err: unknown): err is BodyParserError {
 	);
 }
 
+function isRequestTimeoutError(err: unknown): boolean {
+	return (
+		typeof err === 'object' &&
+		err !== null &&
+		'code' in err &&
+		err.code === 'ETIMEDOUT' &&
+		'status' in err &&
+		err.status === HttpStatus.SERVICE_UNAVAILABLE
+	);
+}
+
 /**
  * Translates known third-party errors into AppError.
  * Returns null for unknown errors, which must be treated as unexpected (500).
@@ -82,6 +93,11 @@ export function normalizeError(err: unknown): AppError | null {
 	// Value could not be cast to the schema type, e.g. findById('not-an-object-id').
 	if (err instanceof mongoose.Error.CastError) {
 		return new ValidationError([{ field: err.path, message: `Invalid value for ${err.path}` }]);
+	}
+
+	// connect-timeout: no response within REQUEST_TIMEOUT_MS.
+	if (isRequestTimeoutError(err)) {
+		return new HttpError(HttpStatus.SERVICE_UNAVAILABLE, 'REQUEST_TIMEOUT', 'Request took too long', { cause: err });
 	}
 
 	if (isBodyParserError(err)) {

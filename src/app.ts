@@ -3,6 +3,7 @@ import apiRouter from './routes/index.js';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import cors from 'cors';
+import timeout from 'connect-timeout';
 import { appErrorHandler } from './common/errors/utills/error-handler.js';
 import { loggerMiddleware } from './common/logger/logger.js';
 import { requestContext } from './common/logger/request-context.js';
@@ -18,6 +19,7 @@ app.set('trust proxy', env.TRUST_PROXY);
 
 app.use(loggerMiddleware);
 app.use(requestContext);
+app.use(timeout(env.REQUEST_TIMEOUT_MS));
 
 app.use(helmet());
 app.use(cors({ origin: env.CORS_ORIGINS, credentials: true }));
