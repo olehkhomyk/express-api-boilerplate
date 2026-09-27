@@ -15,6 +15,22 @@ const envSchema = z.object({
 
 	JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET must be at least 32 characters'),
 	JWT_ACCESS_EXPIRES_IN: z.string().regex(/^\d+[smhd]$/, 'JWT_ACCESS_EXPIRES_IN must look like 15m, 1h or 7d').default('15m'),
+
+	// Number of reverse proxies in front of the app (nginx, load balancer, Railway…).
+	// 0 = no proxy (local dev). Never "true": clients could spoof X-Forwarded-For and fake their IP.
+	TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+
+	// Comma-separated list of frontend origins allowed to call the API from a browser,
+	// e.g. "http://localhost:5173,https://app.site.com".
+	// "*" allows any origin. TODO: replace "*" with the real list before going to production.
+	CORS_ORIGINS: z
+		.string()
+		.default('*')
+		.transform((value): true | string[] =>
+			value === '*'
+				? true
+				: value.split(',').map(origin => origin.trim()).filter(Boolean),
+		),
 });
 
 const result = envSchema.safeParse(process.env);
